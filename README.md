@@ -15,3 +15,7 @@ Launching a parsing on 600 files takes about 25 minutes today ;-)
 The whole parsing is run in a thread, and re-started at every file save.
 
 I need to run the indexing once at the beginning on the whole code base, and find a way to not block the UI during this time, and I also need to save results in a local file-based DB (so it survives restarting) and from then on, only re-index saved files.
+
+Could also run the indexing using the os python interpreter, so that it's outside of sublime, and anyway, we write to a local DB.
+
+Running the parsing of about 1000 files, (using the get_model method) takes about 2 minutes only!
