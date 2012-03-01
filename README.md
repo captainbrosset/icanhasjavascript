@@ -2,6 +2,7 @@ DO NOT USE THIS YET! IT JUST DOESN'T WORK!
 
 This is supposed to be a simple code assist plugin for SublimeText2.
 The way it is intended to work for now is by scanning all javascript files in the current project, and building a model out of the functions, variables and classes so as to propose them through the contextual menu when editing javascript files.
+(Note that for now it only finds out global functions and variables, it might be worth the try indexing just everything, even object properties).
 
 It is not intended to be a code assist tool that knows the type of variable you are currently accessing so as to provide contextual suggestions, but rather just as a tool to speed up typing and making it less error prone.
 
