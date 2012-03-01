@@ -10,4 +10,4 @@ This is inspired by how the current SublimeText2 code assist works inside a give
 There are probably other (better) attempts at doing this, but I don't care, this is worth the try anyway.
 
 For now, the tool parses ALL javascript files at the beginning, and this simply is not proving to work out well.
-Launching a parsing on 600 files takes about 25 minutes ;-)
+Launching a parsing on 600 files takes about 25 minutes ;-) So, even if this runs in athread, it won't fly.
