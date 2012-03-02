@@ -7,7 +7,7 @@ class Function(object):
         self.line_number = line_number
 
     def __repr__(self):
-        return "Function " + self.name + "(" + self.arguments + ")"
+        return "Function " + self.name + "(" + str(self.arguments) + ")"
 
 
 class Variable(object):
