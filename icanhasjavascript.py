@@ -1,102 +1,25 @@
+class attrdict(dict):
+    def __init__(self, *args, **kwargs):
+        dict.__init__(self, *args, **kwargs)
+        self.__dict__ = self
+
 import os
-from datetime import datetime
-from logger import log
 import subprocess
-
-
-class ModelFile(object):
-    def __init__(self, file_name, entities):
-        self.file_name = file_name
-        self.entities = entities
-
-
-class Model(object):
-    def __init__(self):
-        self.files = []
-
-    def add_file(self, file_name, entities):
-        self.files.append(ModelFile(file_name, entities))
-
-
-def get_all_js_files_in_dir(source_dir):
-    fileList = []
-    for root, subFolders, files in os.walk(source_dir):
-        for file in files:
-            if file[-3:] == ".js":
-                fileList.append(os.path.join(root, file))
-    return fileList
-
-
-def index_directories(source_directories):
-    log("Scanning " + str(len(source_directories)) + " project directories ...")
-    total_file_number = 0
-    start_time = datetime.now()
-    for source_dir in source_directories:
-        files = get_all_js_files_in_dir(source_dir)
-        log("Scanning " + str(len(files)) + " javascript files in " + source_dir + "...")
-        total_file_number += len(files)
-        for file in files:
-            subprocess.call(["python", "indexfile.py", file])
-
-    delta = datetime.now() - start_time
-    time_diff = divmod(delta.days * 86400 + delta.seconds, 60)
-    time_per_file = float(time_diff[0] * 60 + time_diff[1]) / float(total_file_number)
-    log("Done parsing all " + str(total_file_number) + " files in " + str(time_diff[0]) + " minutes, " + str(time_diff[1]) + " seconds (" + str(time_per_file) + " seconds per file)")
-
-
-class attrdict(dict):
-    def __init__(self, *args, **kwargs):
-        dict.__init__(self, *args, **kwargs)
-        self.__dict__ = self
+from model import model
+from logger import log
 try:
     import sublime
     import sublime_plugin
 except:
-    # Mocking out dependencies in case of unit testing
-    # FIXME: How to make this more elegant ???
     sublime = {}
-
-    class EventListener:
-        pass
-
+    class EventListener: pass
     sublime_plugin = attrdict(EventListener=EventListener)
 
-
-class ICanHasJavaScript(sublime_plugin.EventListener):
-    def __init__(self):
-        self.done = False
-
-    def index_all(self, view):
-        log("Building the model now ...")
-        index_directories(view.window().folders())
-
-    def on_load(self, view):
-        if not self.done:
-            self.index_all(view)
-            self.done = True
-
-"""
-class attrdict(dict):
-    def __init__(self, *args, **kwargs):
-        dict.__init__(self, *args, **kwargs)
-        self.__dict__ = self
-try:
-    import sublime
-    import sublime_plugin
-except:
-    # Mocking out dependencies in case of unit testing
-    # FIXME: How to make this more elegant ???
-    sublime = {}
-
-    class EventListener:
-        pass
-
-    sublime_plugin = attrdict(EventListener=EventListener)
 
 class Suggestion(object):
-    def __init__(self, entity, file_name):
+    def __init__(self, entity):
         self.entity = entity
-        self.file_name = file_name
+        self.file_name = entity.file_name
 
     def get_display_value(self):
         return str(self)
@@ -104,7 +27,8 @@ class Suggestion(object):
     def get_snippet_value(self):
         name = self.entity.name
         if hasattr(self.entity, "arguments"):
-            name += "(" + ", ".join(self.entity.arguments) + ")"
+            arguments = self.entity.arguments.replace(",", ", ")
+            name += "(" + arguments + ")"
         return name
 
     def get_file_name_only(self):
@@ -115,71 +39,81 @@ class Suggestion(object):
         return self.get_snippet_value() + " (" + self.get_file_name_only() + ")"
 
 
-def get_suggestions(entry, model):
-    suggestions = []
-    for model_file in model.files:
-        for entity in model_file.entities:
-            if entity.name[0:len(entry)] == entry:
-                suggestions.append(Suggestion(entity, model_file.file_name))
-    return suggestions
-
-
 class ICanHasJavaScript(sublime_plugin.EventListener):
     def __init__(self):
+        self.indexer = SubProcessIndexer()
+        self.indexed = False
         self.model = None
-        self._is_constructing_model = False
 
-    def index_all(self, view):
-        if not self._is_constructing_model:
-            log("Building the model now ...")
-            self._is_constructing_model = True
-            model_construction_thread = threading.Thread(None, get_model, "model_construction_thread", (view.window().folders(), self.on_model_constructed))
-            model_construction_thread.start()
+    def index_project(self, view):
+        if not self.indexed:
+            if hasattr(view.window(), "folders"):
+                directories = view.window().folders()
+                if len(directories) > 0:
+                    log("Indexing javascript files in " + str(len(directories)) + " directories")
+                    self.indexer.index_directories(directories)
+                    self.indexed = True
 
-    def on_model_constructed(self, model):
-        log("Done building model")
-        self.model = model
-        self._is_constructing_model = False
+    def on_activated(self, view):
+        self.index_project(view)
+
+    def on_load(self, view):
+        self.index_project(view)
+
+    def on_post_save(self, view):
+        self.model = None
+        self.index_project(view)
+        file_name = view.file_name()
+        if file_name[-3:] == ".js":
+            log("Re-indexing javascript file " + file_name)
+            self.indexer.index_file(file_name)
+
+    def get_javascript_files_in_directory(self, source_dir):
+        fileList = []
+
+        for root, subFolders, files in os.walk(source_dir):
+            for file in files:
+                if file[-3:] == ".js":
+                    fileList.append(os.path.join(root, file))
+
+        return fileList
 
     def on_query_completions(self, view, prefix, locations):
         is_view_matching = view.match_selector(locations[0], "source.js")
-        if not is_view_matching or not self.model:
+        if not is_view_matching:
             return []
 
-        # Only create the model the first time the auto-complete shows up
-        #if not self.model:
-        #    self.construct_model(view)
-
-        suggestions = get_suggestions(prefix, self.model)
+        suggestions = self.get_suggestions(prefix, view.window().folders())
         return [(suggestion.get_display_value(), suggestion.get_snippet_value()) for suggestion in suggestions]
 
-    def on_post_save(self, view):
-        # just recompute the whole model at every file save for now
-        self.construct_model(view)
-"""
+    def update_local_model(self, directories):
+        log("Updating the local model from the DB")
+        files = []
+        for directory in directories:
+            files += self.get_javascript_files_in_directory(directory)
+        self.model = model.get_files_model(files)
 
-if __name__ == "__main__":
-    files = get_all_js_files_in_dir("testdir")
-    assert len(files) == 24
-    assert files[0] == "testdir" + os.sep + "apple.js"
-    assert files[23] == "testdir" + os.sep + "visibility.js"
+    def get_suggestions(self, entry, directories):
+        # On contextual menu open, only get the model if it was not here before
+        # This happens only the first time it's used, and after a file is saved
+        if not self.model:
+            self.update_local_model(directories)
 
-    """
-    def assert_model_retrieved(model):
-        log("Done")
-        assert len(model.files) == 24
-        assert len(model.files[3].entities) == 3
-        assert model.files[3].entities[0].name == "MyClass"
+        suggestions = []
+        for entity in self.model:
+            if entity.name[0:len(entry)] == entry:
+                suggestions.append(Suggestion(entity))
+        return suggestions
 
 
-        assert len(get_suggestions("tes", model)) == 3
-        assert get_suggestions("tes", model)[1].file_name == "testdir" + os.sep + "syntaxerror.js"
-        assert get_suggestions("tes", model)[2].entity.name == "test"
-        assert get_suggestions("test", model)[2].get_display_value() == "test() (visibility.js)"
-        assert get_suggestions("test", model)[1].get_snippet_value() == "test(a, b)"
-    """
+class SubProcessIndexer(object):
+    COMMAND_PREFIX = 'python "' + os.sep.join([sublime.packages_path(), "icanhasjavascript", "indexer", "indexerprocess.py"]) + '" -r "' + os.sep.join([sublime.packages_path(), "icanhasjavascript"]) + '"'
 
-    index_directories(["..\\..\\jdevcc\\at_v1.1_int\\at1104_core\\at\\src\\main\\static"])
-    #get_model(["testdir"], assert_model_retrieved)
+    def index_directories(self, directories):
+        for directory in directories:
+            command = SubProcessIndexer.COMMAND_PREFIX + ' -d "' + directory + '"'
+            subprocess.Popen(command, shell=True)
 
-    print "ALL TESTS OK"
+    def index_file(self, file):
+        command = SubProcessIndexer.COMMAND_PREFIX + ' -f "' + file + '"'
+        subprocess.Popen(command, shell=True)

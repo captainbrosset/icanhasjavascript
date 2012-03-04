@@ -111,6 +111,28 @@ class JSFileVisitorHandler(object):
         
 
 if __name__ == "__main__":  
+    objects = """
+    Aria.classDefinition({
+        $constructor : function (context, recorders, animationLoop, timer) {
+            this.$GameEngine.constructor.apply(this, arguments);
+            this.__colliderResolver = new this.$ColliderResolverImpl();
+        },
+        $prototype: {
+            getResolver: function() {
+                return this.__colliderResolver;
+            }
+        }
+    });
+    """
+    visitor_handler = JSFileVisitorHandler(objects)
+    class MockVisitor(object):
+        def visit_DOT(self, node, source):
+            print node[0].value
+            print node[1].value
+            print node
+    visitor_handler.add_visitor(MockVisitor())
+    visitor_handler.visit()
+
     function_return_code = """
     function test() {
         return doSomething();

@@ -1,5 +1,5 @@
 class Function(object):
-    def __init__(self, name, arguments, start_pos, end_pos, line_number):
+    def __init__(self, name, arguments, start_pos=0, end_pos=0, line_number=0):
         self.name = name
         self.arguments = arguments
         self.start_pos = start_pos
@@ -11,7 +11,7 @@ class Function(object):
 
 
 class Variable(object):
-    def __init__(self, name, start_pos, end_pos, line_number):
+    def __init__(self, name, start_pos=0, end_pos=0, line_number=0):
         self.name = name
         self.start_pos = start_pos
         self.end_pos = end_pos
@@ -33,12 +33,33 @@ class EntitiesVisitor(object):
         return False
 
     def add_function(self, name, arguments, start_pos, end_pos, line_number):
-        if not self._is_in_function(start_pos, end_pos):
+        #if not self._is_in_function(start_pos, end_pos):
+        # For functions, we get all of them, even internal ones
+        exists = False
+        for function in self.functions:
+            if function.name == name and function.arguments == arguments:
+                exists = True
+                break
+        if not exists:
             self.functions.append(Function(name, arguments, start_pos, end_pos, line_number))
 
     def add_variable(self, name, start_pos, end_pos, line_number):
-        if not self._is_in_function(start_pos, end_pos):
+        exists = False
+        for variable in self.variables:
+            if variable.name == name:
+                exists = True
+                break
+        if not exists:
             self.variables.append(Variable(name, start_pos, end_pos, line_number))
+
+    def extract_DOT_part(self, node):
+        if hasattr(node, "value") and hasattr(node, "start"):
+            self.add_variable(node.value, node.start, node.end, node.lineno)
+
+    def visit_DOT(self, node, source):
+        # Get all object names in DOT expressions
+        self.extract_DOT_part(node[0])
+        self.extract_DOT_part(node[1])
 
     def visit_FUNCTION(self, node, source):
         # Named functions only, the getattr returns None if name doesn't exist
@@ -93,4 +114,5 @@ class EntitiesVisitor(object):
     def visit_VAR(self, node, source):
         variables = self.extract_variables(node)
         for variable in variables:
-            self.add_variable(variable["name"], variable["start_pos"], variable["end_pos"], variable["line_number"])
+            if not self._is_in_function(variable["start_pos"], variable["end_pos"]):
+                self.add_variable(variable["name"], variable["start_pos"], variable["end_pos"], variable["line_number"])
