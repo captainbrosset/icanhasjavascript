@@ -1,12 +1,18 @@
 import sqlite3
 import os
-import sys
 import model
+import platform
+
+
+if platform.system() == "Windows":
+    DB_STORAGE_ROOT = "C:\\Temp\\"
+else:
+    DB_STORAGE_ROOT = "/tmp/"
+DB_PATH = DB_STORAGE_ROOT + "icanhasjavascript"
+DB_NAME = "db"
 
 
 class Storage(object):
-    DB_PATH = "/tmp/icanhasjavascript"
-    DB_NAME = "db"
 
     def __init__(self):
         self.init()
@@ -17,11 +23,11 @@ class Storage(object):
         self.create_entity_table()
 
     def get_full_db_name(self):
-        return os.sep.join([Storage.DB_PATH, Storage.DB_NAME])
+        return os.sep.join([DB_PATH, DB_NAME])
 
     def create_db_dir(self):
-        if not os.path.exists(Storage.DB_PATH):
-            os.mkdir(Storage.DB_PATH)
+        if not os.path.exists(DB_PATH):
+            os.mkdir(DB_PATH)
 
     def open_execute_and_close(self, query):
         cursor = self.connection.cursor()
